@@ -58,10 +58,11 @@ function ActiveHiring() {
     fetchApplications();
   };
 
-  // Filter HRs by selected position
-  const filteredHRs = selectedPosition 
+  // Filter HRs by selected position and application status
+  const filteredHRs = (selectedPosition 
     ? hrList.filter(hr => hr.role === selectedPosition)
-    : hrList;
+    : hrList
+  ).filter(hr => getApplicationStatus(hr.email) === 'Not Applied');
 
   useEffect(() => {
     fetchActiveHRs();

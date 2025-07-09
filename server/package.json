@@ -27,7 +27,8 @@
     "multer": "^2.0.1",
     "multer-s3": "^2.10.0",
     "nodemailer": "^7.0.5",
-    "pdf-parse": "^1.1.1"
+    "pdf-parse": "^1.1.1",
+    "socket.io": "^4.8.1"
   },
   "devDependencies": {
     "nodemon": "^3.1.10"

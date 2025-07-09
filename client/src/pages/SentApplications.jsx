@@ -1,11 +1,15 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
+import { io } from 'socket.io-client';
 
 const statusOptions = ["All", "Not Applied", "Awaiting Reply", "Got a Reply"];
 
 function SentApplications() {
   const [applications, setApplications] = useState([]);
   const [statusFilter, setStatusFilter] = useState("All");
+  const [selectedThread, setSelectedThread] = useState(null);
+  const [threadMessages, setThreadMessages] = useState([]);
+  const [showThread, setShowThread] = useState(false);
 
   const fetchApplications = async () => {
     try {
@@ -21,6 +25,27 @@ function SentApplications() {
   useEffect(() => {
     fetchApplications();
   }, []);
+
+  useEffect(() => {
+    // Connect to socket.io server
+    const socket = io('http://localhost:8000', {
+      withCredentials: true,
+    });
+    socket.on('hr-reply', (data) => {
+      // Show notification
+      alert(`You have a reply from ${data.hrName}!`);
+      // Refresh applications list
+      fetchApplications();
+      // If thread modal is open for this thread, refresh messages
+      if (showThread && selectedThread === data.threadId) {
+        handleViewThread(data.threadId);
+      }
+    });
+    return () => {
+      socket.disconnect();
+    };
+    // eslint-disable-next-line
+  }, [showThread, selectedThread]);
 
   const addTestApplication = async () => {
     try {
@@ -44,6 +69,23 @@ function SentApplications() {
     }
   };
 
+  const handleViewThread = async (threadId) => {
+    try {
+      const res = await axios.get(`http://localhost:5000/api/gmail/thread/${threadId}`);
+      setThreadMessages(res.data.messages);
+      setSelectedThread(threadId);
+      setShowThread(true);
+    } catch (err) {
+      alert('Failed to fetch thread');
+    }
+  };
+
+  const handleCloseThread = () => {
+    setShowThread(false);
+    setSelectedThread(null);
+    setThreadMessages([]);
+  };
+
   const filteredApps =
     statusFilter === "All"
       ? applications
@@ -51,10 +93,8 @@ function SentApplications() {
 
   // Calculate status counts
   const statusCounts = {
-    'Not Applied': applications.filter(app => app.status === 'Not Applied').length,
     'Awaiting Reply': applications.filter(app => app.status === 'Awaiting Reply').length,
     'Got a Reply': applications.filter(app => app.status === 'Got a Reply').length,
-    'Total': applications.length
   };
 
   return (
@@ -62,22 +102,14 @@ function SentApplications() {
       <h2 className="text-2xl font-semibold mb-4">📬 Sent Applications</h2>
 
       {/* Status Summary */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <div className="bg-gray-100 p-3 rounded-lg text-center">
-          <div className="text-2xl font-bold text-gray-800">{statusCounts['Not Applied']}</div>
-          <div className="text-sm text-gray-600">Not Applied</div>
-        </div>
-        <div className="bg-yellow-100 p-3 rounded-lg text-center">
+      <div className="grid grid-cols-2 gap-4 mb-6">
+        <div className="bg-yellow-100 p-3 rounded-lg text-center order-1">
           <div className="text-2xl font-bold text-yellow-800">{statusCounts['Awaiting Reply']}</div>
           <div className="text-sm text-yellow-600">Awaiting Reply</div>
         </div>
-        <div className="bg-green-100 p-3 rounded-lg text-center">
+        <div className="bg-green-100 p-3 rounded-lg text-center order-2">
           <div className="text-2xl font-bold text-green-800">{statusCounts['Got a Reply']}</div>
           <div className="text-sm text-green-600">Got a Reply</div>
-        </div>
-        <div className="bg-blue-100 p-3 rounded-lg text-center">
-          <div className="text-2xl font-bold text-blue-800">{statusCounts['Total']}</div>
-          <div className="text-sm text-blue-600">Total</div>
         </div>
       </div>
 
@@ -151,10 +183,10 @@ function SentApplications() {
                     <a
                       href={`https://mail.google.com/mail/u/0/#inbox/${app.threadId}`}
                       target="_blank"
-                      rel="noreferrer"
-                      className="text-blue-600 underline"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 underline hover:text-blue-800"
                     >
-                      View Thread
+                      View sent mail
                     </a>
                   ) : (
                     "—"
@@ -164,6 +196,27 @@ function SentApplications() {
             ))}
           </tbody>
         </table>
+      )}
+
+      {showThread && (
+        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded shadow-lg max-w-lg w-full">
+            <h3 className="text-lg font-bold mb-2">Reply Thread</h3>
+            <ul className="mb-4">
+              {threadMessages.map((msg, idx) => (
+                <li key={idx} className="mb-2">
+                  <b>{msg.from}:</b> {msg.text}
+                </li>
+              ))}
+            </ul>
+            <button
+              className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700"
+              onClick={handleCloseThread}
+            >
+              Close
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

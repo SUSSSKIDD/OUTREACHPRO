@@ -8,6 +8,7 @@ const SentApplication = require('../models/SentApplication');
 
 const sendGmailApi = require('../utils/sendGmailApi');
 const { generateEmailUsingGemini } = require('../utils/generateEmailUsingGemini');
+const { google } = require('googleapis');
 
 // Auth middleware
 const auth = async (req, res, next) => {
@@ -167,6 +168,84 @@ router.post('/send-email', auth, async (req, res) => {
       error: err.message
     });
   }
+});
+
+// Fetch all messages in a Gmail thread
+router.get('/thread/:threadId', async (req, res) => {
+  const { threadId } = req.params;
+  try {
+    // Find the SentApplication to get the user
+    const SentApplication = require('../models/SentApplication');
+    const app = await SentApplication.findOne({ threadId }).populate('user');
+    if (!app || !app.user) {
+      return res.status(404).json({ message: 'Application or user not found' });
+    }
+    if (!app.user.gmailAccess?.refreshToken) {
+      return res.status(403).json({ message: 'User not authorized with Gmail' });
+    }
+    // Set up OAuth2 client
+    const OAuth2 = google.auth.OAuth2;
+    const oauth2Client = new OAuth2(
+      process.env.GOOGLE_CLIENT_ID,
+      process.env.GOOGLE_CLIENT_SECRET,
+      process.env.GOOGLE_REDIRECT_URI
+    );
+    oauth2Client.setCredentials({ refresh_token: app.user.gmailAccess.refreshToken });
+    const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+    // Fetch the thread
+    const thread = await gmail.users.threads.get({ userId: 'me', id: threadId });
+    // Parse messages
+    const messages = (thread.data.messages || []).map(msg => {
+      const headers = msg.payload.headers;
+      const from = headers.find(h => h.name === 'From')?.value || 'Unknown';
+      let text = '';
+      if (msg.payload.parts) {
+        // Find the plain text part
+        const part = msg.payload.parts.find(p => p.mimeType === 'text/plain');
+        if (part && part.body && part.body.data) {
+          text = Buffer.from(part.body.data, 'base64').toString('utf-8');
+        }
+      } else if (msg.payload.body && msg.payload.body.data) {
+        text = Buffer.from(msg.payload.body.data, 'base64').toString('utf-8');
+      }
+      return { from, text };
+    });
+    res.json({ messages });
+  } catch (err) {
+    console.error('Error fetching thread:', err);
+    res.status(500).json({ message: 'Failed to fetch thread' });
+  }
+});
+
+// Gmail Push Notification Webhook
+router.post('/webhook', async (req, res) => {
+  const notification = req.body;
+  if (!notification) {
+    return res.status(400).send('No notification payload');
+  }
+  console.log('Received Gmail webhook notification:', notification);
+
+  // --- DEMO LOGIC: Simulate finding user/thread and updating status ---
+  // In real implementation, extract threadId and user info from notification or Gmail API
+  const threadId = notification.threadId || 'SIMULATED_THREAD_ID'; // Replace with real extraction
+  const userId = notification.userId || 'SIMULATED_USER_ID'; // Replace with real extraction
+  const hrName = notification.hrName || 'HR Name'; // Replace with real extraction
+
+  // Update SentApplication status
+  if (threadId !== 'SIMULATED_THREAD_ID') {
+    await require('../models/SentApplication').findOneAndUpdate(
+      { threadId },
+      { status: 'Got a Reply' }
+    );
+  }
+
+  // Emit socket.io event to user
+  const io = req.app.get('io');
+  if (userId !== 'SIMULATED_USER_ID') {
+    io.to(userId).emit('hr-reply', { threadId, hrName });
+  }
+
+  res.status(200).send('OK');
 });
 
 module.exports = router;

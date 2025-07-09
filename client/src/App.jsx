@@ -3,6 +3,7 @@ import { auth, provider } from './firebase';
 import { signInWithPopup } from 'firebase/auth';
 import FingerprintJS from '@fingerprintjs/fingerprintjs';
 import axios from 'axios';
+import { io } from 'socket.io-client';
 
 import { BrowserRouter as Router, Routes, Route, Navigate, Link } from 'react-router-dom';
 
@@ -36,6 +37,22 @@ function App() {
 
     checkAuthStatus();
   }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    // Connect to socket.io server
+    const socket = io('http://localhost:5000', {
+      query: { userId: user._id },
+    });
+    // Listen for HR reply notifications
+    socket.on('hr-reply', (data) => {
+      alert(`You have a reply from ${data.hrName}!`);
+      // Optionally, trigger a UI update or fetch thread here
+    });
+    return () => {
+      socket.disconnect();
+    };
+  }, [user]);
 
   const loginWithGoogle = async () => {
     try {
