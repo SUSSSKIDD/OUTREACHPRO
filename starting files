@@ -4,3 +4,9 @@ node utils/makeAdminSimple.js pratyuh1234@gmail.com
 
 backend start npm start
 frontendstart npm run dev
+
+
+git add .
+git commit -m "changes pushed" 
+git pull origin main --rebase
+git push origin main
