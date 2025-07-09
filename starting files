@@ -1,0 +1,6 @@
+admin promotion 
+cd server
+node utils/makeAdminSimple.js pratyuh1234@gmail.com
+
+backend start npm start
+frontendstart npm run dev
